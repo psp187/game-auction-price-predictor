@@ -1,0 +1,15 @@
+.idea/
+.DS_Store
+venv/
+.venv/
+.env
+logs/
+raw_data/
+*.json
+*.csv
+*.db
+*.sqlite3
+Test.py
+__pycache__/
+*.pyc
+test2.py
