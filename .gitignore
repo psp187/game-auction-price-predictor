@@ -15,3 +15,6 @@ __pycache__/
 test2.py
 Test1.py
 Test2.py
+parsed_jsons/
+archive/
+APIs.txt
