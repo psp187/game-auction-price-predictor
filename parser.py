@@ -1,25 +1,43 @@
-import sys
-from contextlib import nullcontext
-from typing import Union
-from logging.handlers import RotatingFileHandler
+from typing import Union, Any
+from logger_config import setup_logger
 import nbt_utils as utils
 from pathlib import Path
 import json
-import logging
+import shutil
+import re
 
-log_dir = Path(".") / "logs"
-log_file = log_dir / f"parser.log"
-log_dir.mkdir(parents=True, exist_ok=True)
-handler = RotatingFileHandler(log_file, maxBytes=5242880, backupCount=5, encoding="utf-8")
+JSON = Any
+logger = setup_logger("parser", "parser.log")
 
-log_format = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-handler.setFormatter(log_format)
+def decode_petinfo(petinfo: str | None) -> tuple:
+    if not petinfo:
+        return None, None, None, None
+    try:
+        raw_info = json.loads(petinfo)
+        type = raw_info.get('type', None)
+        tier = raw_info.get('tier', None)
+        candy = raw_info.get('candyUsed')
+        item = raw_info.get('heldItem', None)
+        return type, tier, candy, item
+    except json.JSONDecodeError:
+        return None, None, None, None
 
-logger = logging.getLogger("parser")
-logger.setLevel(logging.INFO)
-logger.addHandler(handler)
+def decode_name(txt: str | None) -> tuple:
+    if not txt:
+        return None, None
 
-def dfs_collect_values(root, key: str):
+    colorless = re.sub(r'§.', '', txt)
+    match = re.search(r'\[Lvl (\d+)\]', colorless)
+    level = None
+    clean = colorless.strip()
+
+    if match:
+        level = int(match.group(1))
+        clean = colorless.replace(match.group(0), '').strip()
+    return level, clean
+
+
+def dfs_collect_value(root, key: str):
     stack = [root]
 
     while stack:
@@ -37,23 +55,11 @@ def dfs_collect_values(root, key: str):
                     stack.append(item)
     return None
 
-def save_to_archive(file):
-    folder_path = Path("archive")
-    folder_path.mkdir(parents=True, exist_ok=True)
-    file_path = folder_path / file.name
-
-    if file_path.exists():
-        print(f"File {file.name} already exists.")
-    else:
-        with file_path.open("w", encoding="utf-8") as f:
-            json.dump(file, f, ensure_ascii=False, indent=4)
-
-
 def parse(source_path: Union[str, Path], output_path=Path("parsed_jsons")) -> bool:
+    source = Path(source_path)
     try:
         output_path.mkdir(parents=True, exist_ok=True)
-        source = Path(source_path)
-        output = output_path / f"{source.name}"
+        output = output_path / source.name
 
         with source.open("r", encoding="utf-8") as f:
             data = json.load(f)
@@ -70,53 +76,50 @@ def parse(source_path: Union[str, Path], output_path=Path("parsed_jsons")) -> bo
                 if key in auction:
                     del auction[key]
 
-            keys = [
-                'Name',
-                'rarity_upgrades',
-                'hot_potato_count',
-                'gems',
-                'modifier',
-                'dungeon_item_level',
-                'upgrade_level',
-                'enchantments',
-                'id',
-                'dye_item',
-                'item_tier',
-                'hecatomb_s_runs',
-                'eman_kills',
-                'baseStatBoostPercentage',
-                'boosters',
-                'petInfo',
-                'runes'
-
-            ]
             try:
-                NBT_DATA = auction['item_bytes']
-                decoded = utils.nbt_base64_to_dict(NBT_DATA)
-                extra = dfs_collect_values(decoded, 'ExtraAttributes') or {}
-                display = dfs_collect_values(decoded, 'display') or {}
+                nbt_data = auction['item_bytes']
+                decoded = utils.nbt_base64_to_dict(nbt_data)
+                extra = dfs_collect_value(decoded, 'ExtraAttributes') or {}
+                display = dfs_collect_value(decoded, 'display') or {}
 
-                try:
-                    for key in keys:
-                        if key in extra:
-                            auction[key] = extra.get(key) or None
-                        else:
-                            auction[key] = display.get(key) or None
-                except Exception as e:
-                    logger.warning(f"Something happend to extra and display - 100 line: {e}")
+                level, cleaned_name = decode_name(display.get('Name'))
+                base_id = extra.get('id')
+
+                auction['Name'] = cleaned_name
+                auction['rarity_upgrades'] = extra.get('rarity_upgrades', 0)
+                auction['hot_potato_count'] = extra.get('hot_potato_count', 0)
+                auction['gems'] = extra.get('gems')
+                auction['modifier'] = extra.get('modifier')
+                auction['dungeon_item_level'] = extra.get('dungeon_item_level')
+                auction['upgrade_level'] = extra.get('upgrade_level')
+                auction['enchantments'] = extra.get('enchantments')
+                if base_id == "PET":
+                    pet_type, tier, candy, held_item = decode_petinfo(extra.get('petInfo'))
+                    auction['id'] = pet_type
+                else:
+                    auction['id'] = base_id
+                    tier, candy, held_item = None, None, None
+                auction['dye_item'] = extra.get('dye_item')
+                auction['item_tier'] = extra.get('item_tier')
+                auction['hecatomb_s_runs'] = extra.get('hecatomb_s_runs')
+                auction['eman_kills'] = extra.get('eman_kills')
+                auction['baseStatBoostPercentage'] = extra.get('baseStatBoostPercentage')
+                auction['boosters'] = extra.get('boosters')
+                auction['pet_info'] = {'level': level, 'tier': tier, 'candy_used': candy, 'held_item': held_item}
+                auction['runes'] = extra.get('runes')
 
                 del auction['item_bytes']
             except Exception as e:
                 logger.warning(f"Could not parse NBT for auction {auction.get('auction_id')}. Error: {e}")
+                error_auction(auction, source.name)
 
             cleaned.append(auction)
-
 
         with output.open("w", encoding="utf-8") as f:
             json.dump(cleaned, f, ensure_ascii=False, indent=4)
 
         logger.info(f"Successfully parsed {source.name} -> {len(cleaned)} items.")
-        remove_from_source(source)
+        archive(source)
         return True
 
     except FileNotFoundError:
@@ -132,9 +135,29 @@ def parse(source_path: Union[str, Path], output_path=Path("parsed_jsons")) -> bo
         logger.error(f"An unexpected error occurred while parsing {source_path}: {e}")
         return False
 
+def archive(source_path: Path) -> bool:
+    try:
+        output_path = Path("archive")
+        output_path.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(source_path), output_path)
+        logger.info(f"Archived {source_path.name} to {output_path}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to archive {source_path.name}. Error: {e}")
+    return False
 
-def remove_from_source(source_path):
-    source = Path(source_path)
-    source.unlink(missing_ok=True)
+def error_auction(data: dict, filename: str) -> bool:
+    error_dir = Path("bugged_auctions")
+    error_dir.mkdir(parents=True, exist_ok=True)
+    auction_id = data.get("auction_id")
+    error_filename = f"{auction_id}_from_{filename}"
+    file_path = error_dir / error_filename
 
-parse(r"raw_data/auctions_2025-09-14_22-09-16.json")
+    try:
+        with file_path.open("w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
+        logger.warning(f"Saved bugged auction {auction_id} to {error_filename}.")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to save bugged auction {auction_id}: {e}")
+        return False

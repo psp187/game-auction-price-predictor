@@ -1,6 +1,5 @@
-from logging.handlers import RotatingFileHandler
 import requests
-import logging
+from logger_config import setup_logger
 import json
 import datetime
 from pathlib import Path
@@ -8,17 +7,7 @@ from pathlib import Path
 API_URl = r"https://api.hypixel.net/v2/skyblock/auctions_ended"
 OUTPUT_FOLDER = "raw_data"
 
-log_dir = Path(".") / "logs"
-log_file = log_dir / f"data_collector.log"
-log_dir.mkdir(parents=True, exist_ok=True)
-handler = RotatingFileHandler(log_file, maxBytes=5242880, backupCount=5, encoding="utf-8")
-
-log_format = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-handler.setFormatter(log_format)
-
-logger = logging.getLogger("data_collector")
-logger.setLevel(logging.INFO)
-logger.addHandler(handler)
+logger = setup_logger("data_collector", "data_collector.log")
 
 def fetch_data(url):
     try:
@@ -45,21 +34,42 @@ def export_to_json(data, filename = "auctions", folder=OUTPUT_FOLDER):
         json.dump(data, f, ensure_ascii=False, indent=4)
     logger.info("Data exported successfully.")
 
+def last_update(data, txt_file = Path('last_update.txt')) -> bool:
+    try:
+        timestamp = data.get('lastUpdated')
+        if not txt_file.exists():
+            txt_file.write_text(str(timestamp))
+            return True
+        else:
+            time = int(txt_file.read_text())
+            if time != timestamp:
+                txt_file.write_text(str(timestamp))
+                return True
+            else:
+                return False
+    except Exception as e:
+        logger.error(f"Error while fetching data: {e}")
+        return False
+
 
 def main():
     logger.info("--- Starting data collection run ---")
     data = fetch_data(API_URl)
 
+    flag = last_update(data)
+
     if not data:
         logger.error("No data found")
         return
-
-    if data.get("success"):
-        export_to_json(data, folder=OUTPUT_FOLDER)
-
+    if flag:
+        logger.info("New data found.")
+        if data.get("success"):
+            export_to_json(data, folder=OUTPUT_FOLDER)
+        else:
+            cause = data.get('cause', 'No cause provided')
+            logger.warning(f"API call was not successful. {cause}")
     else:
-        cause = data.get('cause', 'No cause provided')
-        logger.warning(f"API call was not successful. {cause}")
+        logger.info("No new data found. Skipping file creation.")
 
     logger.info("--- Data collection run finished ---")
 
