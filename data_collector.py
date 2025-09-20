@@ -3,13 +3,14 @@ from logger_config import setup_logger
 import json
 import datetime
 from pathlib import Path
+from typing import Any
 
 API_URl = r"https://api.hypixel.net/v2/skyblock/auctions_ended"
 OUTPUT_FOLDER = "raw_data"
-
 logger = setup_logger("data_collector", "data_collector.log")
+JSON = Any
 
-def fetch_data(url):
+def fetch_data(url:str) -> JSON | None:
     try:
         response = requests.get(url)
         response.raise_for_status()
@@ -20,8 +21,7 @@ def fetch_data(url):
         logger.error(f"Error while fetching data: {e}")
         return None
 
-
-def export_to_json(data, filename = "auctions", folder=OUTPUT_FOLDER):
+def export_to_json(data: JSON, filename: str = "auctions", folder: str = OUTPUT_FOLDER) -> Path:
     t = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
     folder_path = Path(folder)
@@ -34,7 +34,9 @@ def export_to_json(data, filename = "auctions", folder=OUTPUT_FOLDER):
         json.dump(data, f, ensure_ascii=False, indent=4)
     logger.info("Data exported successfully.")
 
-def last_update(data, txt_file = Path('last_update.txt')) -> bool:
+    return file_path
+
+def last_update(data: dict, txt_file: Path = Path('last_update.txt')) -> bool:
     try:
         timestamp = data.get('lastUpdated')
         if not txt_file.exists():
@@ -52,26 +54,26 @@ def last_update(data, txt_file = Path('last_update.txt')) -> bool:
         return False
 
 
-def main():
+def fetch_new() -> Path | None:
     logger.info("--- Starting data collection run ---")
     data = fetch_data(API_URl)
 
-    flag = last_update(data)
-
     if not data:
         logger.error("No data found")
-        return
-    if flag:
+        return None
+    if last_update(data):
         logger.info("New data found.")
         if data.get("success"):
-            export_to_json(data, folder=OUTPUT_FOLDER)
+            return export_to_json(data)
         else:
             cause = data.get('cause', 'No cause provided')
             logger.warning(f"API call was not successful. {cause}")
     else:
         logger.info("No new data found. Skipping file creation.")
-
     logger.info("--- Data collection run finished ---")
+
+def main():
+    fetch_new()
 
 if __name__ == "__main__":
     main()

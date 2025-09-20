@@ -8,6 +8,8 @@ import re
 
 JSON = Any
 logger = setup_logger("parser", "parser.log")
+OUTPUT_ARCHIVE_PATH_DIR = Path(r"archive\raw_archive")
+
 
 def decode_petinfo(petinfo: str | None) -> tuple:
     if not petinfo:
@@ -37,7 +39,7 @@ def decode_name(txt: str | None) -> tuple:
     return level, clean
 
 
-def dfs_collect_value(root, key: str):
+def dfs_collect_value(root: Any, key: str)-> Any | None:
     stack = [root]
 
     while stack:
@@ -47,15 +49,23 @@ def dfs_collect_value(root, key: str):
             if key in node:
                 return node[key]
             for value in node.values():
-                if isinstance(value, (dict, list)):
-                    stack.append(value)
+                stack.append(value)
         elif isinstance(node, list):
             for item in node:
-                if isinstance(item, (dict, list)):
-                    stack.append(item)
+                stack.append(item)
     return None
 
 def parse(source_path: Union[str, Path], output_path=Path("parsed_jsons")) -> bool:
+    key_extra = [
+        'gems', 'modifier', 'dungeon_item_level', 'upgrade_level', 'enchantments', 'dye_item', 'item_tier', 'hecatomb_s_runs', 'eman_kills',
+        'baseStatBoostPercentage', 'boosters', 'runes', 'stats_book', 'power_ability_scroll', 'divan_powder_coating', 'thunder_charge', 'tuned_transmission',
+        'ethermerge', 'farming_for_dummies_count', 'talisman_enrichment', 'polarvoid', 'mined_crops', 'bookworm_books', 'ability_scroll', 'ability_scroll',
+        'drill_part_fuel_tank', 'boss_tier', 'blood_god_kills', 'winning_bid', 'collected_coins', 'wet_book_count', 'sinker', 'line', 'hook', 'pelts_earned',
+        'gilded_gifted_coins', 'additional_coins', 'skin', 'mana_disintegrator_count', 'jalapeno_count', 'art_of_war_count', 'magma_cube_absorber', 'spider_kills',
+        'chimera_found', 'logs_cut', 'absorb_logs_chopped', 'wood_singularity_count', 'artOfPeaceApplied', 'zombie_kills', 'drill_part_engine', 'pandora_rarity',
+        'necromancer_souls', 'rarity_upgrades', 'hot_potato_count', 'drill_part_upgrade_module'
+    ]
+
     source = Path(source_path)
     try:
         output_path.mkdir(parents=True, exist_ok=True)
@@ -83,30 +93,20 @@ def parse(source_path: Union[str, Path], output_path=Path("parsed_jsons")) -> bo
                 display = dfs_collect_value(decoded, 'display') or {}
 
                 level, cleaned_name = decode_name(display.get('Name'))
-                base_id = extra.get('id')
+                auction['name'] = cleaned_name
 
-                auction['Name'] = cleaned_name
-                auction['rarity_upgrades'] = extra.get('rarity_upgrades', 0)
-                auction['hot_potato_count'] = extra.get('hot_potato_count', 0)
-                auction['gems'] = extra.get('gems')
-                auction['modifier'] = extra.get('modifier')
-                auction['dungeon_item_level'] = extra.get('dungeon_item_level')
-                auction['upgrade_level'] = extra.get('upgrade_level')
-                auction['enchantments'] = extra.get('enchantments')
+                base_id = extra.get('id')
                 if base_id == "PET":
                     pet_type, tier, candy, held_item = decode_petinfo(extra.get('petInfo'))
-                    auction['id'] = pet_type
+                    auction['item_id'] = pet_type
                 else:
-                    auction['id'] = base_id
+                    auction['item_id'] = base_id
                     tier, candy, held_item = None, None, None
-                auction['dye_item'] = extra.get('dye_item')
-                auction['item_tier'] = extra.get('item_tier')
-                auction['hecatomb_s_runs'] = extra.get('hecatomb_s_runs')
-                auction['eman_kills'] = extra.get('eman_kills')
-                auction['baseStatBoostPercentage'] = extra.get('baseStatBoostPercentage')
-                auction['boosters'] = extra.get('boosters')
+
                 auction['pet_info'] = {'level': level, 'tier': tier, 'candy_used': candy, 'held_item': held_item}
-                auction['runes'] = extra.get('runes')
+
+                for key in key_extra:
+                    auction[key] = extra.get(key, None)
 
                 del auction['item_bytes']
             except Exception as e:
@@ -119,7 +119,7 @@ def parse(source_path: Union[str, Path], output_path=Path("parsed_jsons")) -> bo
             json.dump(cleaned, f, ensure_ascii=False, indent=4)
 
         logger.info(f"Successfully parsed {source.name} -> {len(cleaned)} items.")
-        archive(source)
+        archive(source, OUTPUT_ARCHIVE_PATH_DIR)
         return True
 
     except FileNotFoundError:
@@ -135,9 +135,8 @@ def parse(source_path: Union[str, Path], output_path=Path("parsed_jsons")) -> bo
         logger.error(f"An unexpected error occurred while parsing {source_path}: {e}")
         return False
 
-def archive(source_path: Path) -> bool:
+def archive(source_path: Path, output_path: Path) -> bool:
     try:
-        output_path = Path("archive")
         output_path.mkdir(parents=True, exist_ok=True)
         shutil.move(str(source_path), output_path)
         logger.info(f"Archived {source_path.name} to {output_path}")
@@ -161,3 +160,4 @@ def error_auction(data: dict, filename: str) -> bool:
     except Exception as e:
         logger.error(f"Failed to save bugged auction {auction_id}: {e}")
         return False
+
