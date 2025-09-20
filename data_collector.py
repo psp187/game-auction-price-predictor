@@ -35,41 +35,36 @@ def export_to_json(data, filename: str = "auctions", folder: str = OUTPUT_FOLDER
     return file_path
 
 def last_update(data: dict, txt_file: Path = Path('last_update.txt')) -> bool:
-    try:
-        timestamp = data.get('lastUpdated')
-        if txt_file.exists():
-            time = int(txt_file.read_text())
-            if time != timestamp:
-                txt_file.write_text(str(timestamp))
-                return True
-            else:
-                return False
-        else:
-            txt_file.write_text(str(timestamp))
-            return True
-
-    except Exception as e:
-        logger.error(f"Error while fetching data: {e}")
+    timestamp = data.get('lastUpdated')
+    if timestamp is None:
+        logger.warning("No 'lastUpdated' in data")
         return False
 
+    current = int(txt_file.read_text()) if txt_file.exists() else None
+    if current != timestamp:
+        txt_file.write_text(str(timestamp))
+        return True
+    return False
 
 def fetch_new() -> Path | None:
     logger.info("--- Starting data collection run ---")
     data = fetch_data(API_URl)
-
     if not data:
         logger.error("No data found")
         return None
-    if last_update(data):
-        logger.info("New data found.")
-        if data.get("success"):
-            return export_to_json(data)
-        else:
-            cause = data.get('cause', 'No cause provided')
-            logger.warning(f"API call was not successful. {cause}")
-    else:
+
+    if not last_update(data):
         logger.info("No new data found. Skipping file creation.")
+        return None
+
+    logger.info("New data found.")
+    if data.get("success"):
+        return export_to_json(data)
+
+    cause = data.get('cause', 'No cause provided')
+    logger.warning(f"API call was not successful. {cause}")
     logger.info("--- Data collection run finished ---")
+    return None
 
 def main():
     fetch_new()
