@@ -6,11 +6,14 @@ import json
 import shutil
 import re
 
-JSON = Any
+# jaki sens ma ustawianie JSON = Any?
 logger = setup_logger("parser", "parser.log")
 OUTPUT_ARCHIVE_PATH_DIR = Path(r"archive\raw_archive")
 
-
+# ogolnie staraj sie projektowac logike w taki sposob zeby funkcja zwracala ci "coś" albo None
+# tzn. w przypadku sukcesu zwroc tuple (a, b, c, d), w przypadku faila zwróć None, a nie tuple (None, None, None, None)
+# to jest taka standardowa praktyka
+# wtedy w type hinting robisz -> tuple | None i user wie ze moze ci wyjsc gowno
 def decode_petinfo(petinfo: str | None) -> tuple:
     if not petinfo:
         return None, None, None, None
@@ -39,7 +42,7 @@ def decode_name(txt: str | None) -> tuple:
     return level, clean
 
 
-def dfs_collect_value(root: Any, key: str)-> Any | None:
+def dfs_collect_value(root: Any, key: str) -> Any | None:
     stack = [root]
 
     while stack:
@@ -48,11 +51,8 @@ def dfs_collect_value(root: Any, key: str)-> Any | None:
         if isinstance(node, dict):
             if key in node:
                 return node[key]
-            for value in node.values():
-                stack.append(value)
-        elif isinstance(node, list):
-            for item in node:
-                stack.append(item)
+            node = node.values()
+        [stack.append(value) for value in node] # tutaj mozna sobie taki shortcut zrobic
     return None
 
 def parse(source_path: Union[str, Path], output_path=Path("parsed_jsons")) -> bool:
@@ -82,9 +82,9 @@ def parse(source_path: Union[str, Path], output_path=Path("parsed_jsons")) -> bo
                 continue
 
             keys_remove = ['seller', 'seller_profile', 'buyer', 'buyer_profile', 'timestamp']
+            # tak mozna zrobic lepiej, bez niepotrzebnego ifa drugiego
             for key in keys_remove:
-                if key in auction:
-                    del auction[key]
+                auction.pop(key, None)
 
             try:
                 nbt_data = auction['item_bytes']
@@ -108,7 +108,8 @@ def parse(source_path: Union[str, Path], output_path=Path("parsed_jsons")) -> bo
                 for key in key_extra:
                     auction[key] = extra.get(key, None)
 
-                del auction['item_bytes']
+                auction.pop('item_bytes', None)  # del ci wyjebie wyjatek, a tego staramy sie uniknac
+                # jak zalezy ci zeby miec info czy klucz zostal usuniety to sobie przypisz to wyrazenie wyzej do zmiennej i sprawdz
             except Exception as e:
                 logger.warning(f"Could not parse NBT for auction {auction.get('auction_id')}. Error: {e}")
                 error_auction(auction, source.name)
@@ -135,17 +136,17 @@ def parse(source_path: Union[str, Path], output_path=Path("parsed_jsons")) -> bo
         logger.error(f"An unexpected error occurred while parsing {source_path}: {e}")
         return False
 
-def archive(source_path: Path, output_path: Path) -> bool:
+# nie ma potrzeby zwracania czegokolwiek, jesli potem tego nie uzywasz
+def archive(source_path: Path, output_path: Path):
     try:
         output_path.mkdir(parents=True, exist_ok=True)
         shutil.move(str(source_path), output_path)
         logger.info(f"Archived {source_path.name} to {output_path}")
-        return True
     except Exception as e:
         logger.error(f"Failed to archive {source_path.name}. Error: {e}")
-    return False
 
-def error_auction(data: dict, filename: str) -> bool:
+# tak samo tutaj - po co zwracac jak to do niczego nie sluzy
+def error_auction(data: dict, filename: str):
     error_dir = Path("bugged_auctions")
     error_dir.mkdir(parents=True, exist_ok=True)
     auction_id = data.get("auction_id")
@@ -156,8 +157,6 @@ def error_auction(data: dict, filename: str) -> bool:
         with file_path.open("w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=4)
         logger.warning(f"Saved bugged auction {auction_id} to {error_filename}.")
-        return True
     except Exception as e:
         logger.error(f"Failed to save bugged auction {auction_id}: {e}")
-        return False
 

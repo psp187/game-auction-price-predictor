@@ -3,14 +3,12 @@ from logger_config import setup_logger
 import json
 import datetime
 from pathlib import Path
-from typing import Any
 
 API_URl = r"https://api.hypixel.net/v2/skyblock/auctions_ended"
 OUTPUT_FOLDER = "raw_data"
 logger = setup_logger("data_collector", "data_collector.log")
-JSON = Any
 
-def fetch_data(url:str) -> JSON | None:
+def fetch_data(url:str):
     try:
         response = requests.get(url)
         response.raise_for_status()
@@ -21,7 +19,7 @@ def fetch_data(url:str) -> JSON | None:
         logger.error(f"Error while fetching data: {e}")
         return None
 
-def export_to_json(data: JSON, filename: str = "auctions", folder: str = OUTPUT_FOLDER) -> Path:
+def export_to_json(data, filename: str = "auctions", folder: str = OUTPUT_FOLDER) -> Path:
     t = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
     folder_path = Path(folder)
@@ -39,16 +37,17 @@ def export_to_json(data: JSON, filename: str = "auctions", folder: str = OUTPUT_
 def last_update(data: dict, txt_file: Path = Path('last_update.txt')) -> bool:
     try:
         timestamp = data.get('lastUpdated')
-        if not txt_file.exists():
-            txt_file.write_text(str(timestamp))
-            return True
-        else:
+        if txt_file.exists():
             time = int(txt_file.read_text())
             if time != timestamp:
                 txt_file.write_text(str(timestamp))
                 return True
             else:
                 return False
+        else:
+            txt_file.write_text(str(timestamp))
+            return True
+
     except Exception as e:
         logger.error(f"Error while fetching data: {e}")
         return False
