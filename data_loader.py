@@ -39,14 +39,12 @@ def insert_auction(cur: sqlite3.Cursor, auction_data: dict) -> dict:
 
     for column_name in column_names:
         if column_name == 'bin':
-            main_data_queue.append(1 if auction_data.get('bin') else 0)
+            main_data_queue.append(int(bool(auction_data.get('bin'))))  # tutaj raczej w taki sposob pyszniutki
         else:
             main_data_queue.append(auction_data.get(column_name))
 
-    main_data_tuple = tuple(main_data_queue)
-
     try:
-        cur.execute(sql_auctions, main_data_tuple)
+        cur.execute(sql_auctions, tuple(main_data_queue))  # nie ma po co robic zmiennej jesli uzywasz jej tylko w jednym miejscu
         auction_id = auction_data.get('auction_id')
         rows_added['auctions'] = 1
     except sqlite3.IntegrityError:
@@ -56,7 +54,7 @@ def insert_auction(cur: sqlite3.Cursor, auction_data: dict) -> dict:
         logger.warning(f"Failed to insert auction {auction_data.get('auction_id')}: {e}")
         return {}
 
-    enchantments_data = auction_data.get('enchantments') #enchantments table
+    enchantments_data = auction_data.get('enchantments')  # enchantments table
 
     if enchantments_data:
         enchants_queue = []
@@ -241,6 +239,11 @@ def insert_auction(cur: sqlite3.Cursor, auction_data: dict) -> dict:
     return rows_added
 
 def load_data(input_path: Path = INPUT_DIR) -> None:
+    # staraj sie nie robic takich wielkich try/except
+    # to raczej sluzy to sprawdzania konkretnych linii kodu ktore potencjalnie moga wywalic error
+    # wrzucanie calej logiki do try except nie prowadzi do niczego dobrego
+    # zobacz ktora linia moze rzucac wyjatek i tylko ją wrzuć do try except
+    # podejrzewam ze to sqlite3.connect(DATABASE) moze rzucac wyjatek jak mu sie nie uda z baza polaczyc ale ty wiesz lepiej
     try:
         with sqlite3.connect(DATABASE) as conn:
             cur = conn.cursor()
