@@ -62,7 +62,9 @@ CREATE TABLE IF NOT EXISTS auctions (
     artOfPeaceApplied INTEGER,
     zombie_kills INTEGER,
     drill_part_engine TEXT,
-    pandora_rarity TEXT
+    pandora_rarity TEXT,
+    blaze_consumer INTEGER,
+    handles_found INTEGER
     );
 """,  #main_table
 
@@ -113,6 +115,7 @@ CREATE TABLE IF NOT EXISTS pet_info (
     tier TEXT,
     candy_used INTEGER,
     held_item TEXT,
+    pet_skin TEXT,
     FOREIGN KEY (auction_id) REFERENCES auctions (auction_id) ON DELETE CASCADE
 );    
 """,   #petInfo

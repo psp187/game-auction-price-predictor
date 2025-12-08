@@ -1,79 +1,66 @@
 import requests
 from logger_config import setup_logger
-import json
-import datetime
 from pathlib import Path
-from typing import Any
+from utils import export_to_json
 
-API_URl = r"https://api.hypixel.net/v2/skyblock/auctions_ended"
-OUTPUT_FOLDER = "raw_data"
-logger = setup_logger("data_collector", "data_collector.log")
-JSON = Any
+class DataCollector:
+    def __init__(self, api_url:str, output_dir_path: Path, output_filename: str, last_update_file: Path, logger_conf:tuple):
+        self.api_url = api_url
+        self.output_dir_path = output_dir_path
+        self.output_filename = output_filename #only string name, without suffix
+        self.last_update_file = last_update_file
+        self.logger = setup_logger(*logger_conf) #* needed to unpack tuple
 
-def fetch_data(url:str) -> JSON | None:
-    try:
-        response = requests.get(url)
-        response.raise_for_status()
-        logger.info(f"Successfully fetched data. Status code: {response.status_code}")
-        return response.json()
+    def fetch_data(self):
+        try:
+            response = requests.get(self.api_url)
+            response.raise_for_status()
+            self.logger.info(f"Successfully fetched data. Status code: {response.status_code}")
+            return response.json()
 
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Error while fetching data: {e}")
-        return None
+        except requests.exceptions.RequestException as e:
+            self.logger.error(f"Error while fetching data: {e}")
+            return None
 
-def export_to_json(data: JSON, filename: str = "auctions", folder: str = OUTPUT_FOLDER) -> Path:
-    t = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-
-    folder_path = Path(folder)
-    folder_path.mkdir(parents=True, exist_ok=True)
-    file_path = folder_path / f"{filename}_{t}.json"
-
-    logger.info(f"Exporting data to {file_path}")
-
-    with file_path.open( "w", encoding='utf8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
-    logger.info("Data exported successfully.")
-
-    return file_path
-
-def last_update(data: dict, txt_file: Path = Path('last_update.txt')) -> bool:
-    try:
-        timestamp = data.get('lastUpdated')
-        if not txt_file.exists():
-            txt_file.write_text(str(timestamp))
-            return True
-        else:
-            time = int(txt_file.read_text())
-            if time != timestamp:
-                txt_file.write_text(str(timestamp))
+    def last_update(self, data: dict) -> bool:
+        try:
+            timestamp = data.get('lastUpdated')
+            if not self.last_update_file.exists():
+                self.last_update_file.write_text(str(timestamp))
                 return True
             else:
-                return False
-    except Exception as e:
-        logger.error(f"Error while fetching data: {e}")
-        return False
+                time = int(self.last_update_file.read_text())
+                if time != timestamp:
+                    self.last_update_file.write_text(str(timestamp))
+                    return True
+                else:
+                    return False
+        except Exception as e:
+            self.logger.error(f"Error while checking last update: {e}")
+            return False
 
+    def fetch_new(self):
+        self.logger.info("Starting data collection run.")
+        data = self.fetch_data()
 
-def fetch_new() -> Path | None:
-    logger.info("--- Starting data collection run ---")
-    data = fetch_data(API_URl)
-
-    if not data:
-        logger.error("No data found")
-        return None
-    if last_update(data):
-        logger.info("New data found.")
-        if data.get("success"):
-            return export_to_json(data)
+        if not data:
+            self.logger.error("No data found")
+            return None
+        if self.last_update(data):
+            self.logger.info("New data found.")
+            if data.get("success"):
+                return export_to_json(
+                    data,
+                    file_dir_path=self.output_dir_path,
+                    file_name=self.output_filename,
+                    create_folder=True,
+                    time_stamp=True
+                )
+            else:
+                cause = data.get('cause', 'No cause provided')
+                self.logger.warning(f"API call was not successful. {cause}")
         else:
-            cause = data.get('cause', 'No cause provided')
-            logger.warning(f"API call was not successful. {cause}")
-    else:
-        logger.info("No new data found. Skipping file creation.")
-    logger.info("--- Data collection run finished ---")
+            self.logger.info("No new data found. Skipping file creation.")
 
-def main():
-    fetch_new()
+        self.logger.info("--- Data collection run finished ---")
 
-if __name__ == "__main__":
-    main()
