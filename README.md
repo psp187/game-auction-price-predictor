@@ -1,7 +1,7 @@
 # Hypixel Auction Sniper
 ![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
 
-## ⚠️ Repository Notice
+## Repository Notice
 **This repository serves as a technical showcase of the project's core data engineering pipeline.**
 
 The full source code, including machine learning models and the API, is being developed for a future commercial release. This curated repository demonstrates the complete process of collecting, parsing, transforming, and storing data, which forms the foundation for the ML-driven price prediction engine.
@@ -11,7 +11,7 @@ The full source code, including machine learning models and the API, is being de
 
 ---
 
-## 📖 Project Overview
+## Project Overview
 The **In-Game Auction Sniper** is an automated trading system designed for the **Hypixel Skyblock** MMORPG economy. It processes real-time auction data to identify profitable trade opportunities using Machine Learning.
 
 The pipeline operates in three stages:
@@ -20,7 +20,7 @@ The pipeline operates in three stages:
 3.  **Storage:** Loading structured data into a persistent SQLite database (`data_loader.py`).
 ---
 
-## 📂 File Structure Overview
+## File Structure Overview
 
 | File | Description |
 |---|---|
@@ -35,7 +35,7 @@ The pipeline operates in three stages:
 
 ---
 
-## 📊 Model Performance & Analysis
+## Model Performance & Analysis
 
 The price prediction model was trained on historical auction data prepared by this pipeline. Below is a SHAP (SHapley Additive exPlanations) analysis, illustrating which features have the biggest impact on the final price prediction.
 
