@@ -1,5 +1,5 @@
 # Hypixel Auction Sniper
-![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
+![Python](https://img.shields.io/badge/Python-3.13%2B-blue?logo=python)
 
 ## Repository Notice
 **This repository serves as a technical showcase of the project's core data engineering pipeline.**
